@@ -10,6 +10,11 @@ SIDE_PANEL_WIDTH_RATIO = 1/3   # 旁邊黑色區域相對遊戲區寬度
 
 FPS = 60
 
+# 預設難度
+DIFFICULTY = "Easy"  
+# 預設 Easy
+DIFFICULTY_idx = 0
+
 # --- Movement auto-repeat (DAS & ARR) ---
 DAS_DELAY = 200   # 延遲自動移動啟動 (ms)
 ARR_SPEED = 40    # 自動移動間隔 (ms)
@@ -74,3 +79,5 @@ BOARD_OFFSET_Y = FRAME_BORDER             # board Y (leave border thickness at t
 
 # Update screen height according to new frame
 SCREEN_HEIGHT = BOARD_HEIGHT_PX + FRAME_BORDER*2
+
+
