@@ -26,6 +26,7 @@ class TetrisGame:
 
         self.keys = DEFAULT_KEYS
         self.run_menu()
+        
 
     # ---------- 音樂 ----------
     def play_music(self):
@@ -38,10 +39,10 @@ class TetrisGame:
     # ---------- 主流程 ----------
     def run_menu(self):
         menu = MenuUI(self.screen)
-        while True:
+        while True:                          # ← 這層迴圈永遠在等你回到選單
             opt = menu.run()
-            if opt==0: self.start_game()
-            elif opt==1: SettingUI(self.screen, self.keys).run()
+            if opt == 0: self.start_game()   # 如果 start_game() 正常結束，就會回到這裡
+            elif opt == 1: SettingUI(self.screen, self.keys).run()
             else: pygame.quit(); sys.exit()
 
     def start_game(self):
@@ -53,13 +54,16 @@ class TetrisGame:
         self.fall_delay = 1000
         self.drop_timer = pygame.time.get_ticks()
 
+        # 「遊戲進行中」旗標
+        self.in_game = True  
+
         # ↓ 鍵狀態
         self.down_pressed = False
         self.down_start   = 0
         self.down_delay   = 120   # 首次加速值
 
         self.move_dir = self.das_timer = self.arr_timer = 0
-        self.game_loop()
+        self.game_loop()        
 
     # ---------- 計分 & 升級 ----------
     def update_score(self, cleared):
@@ -102,7 +106,7 @@ class TetrisGame:
     # ---------- 遊戲迴圈 ----------
     def game_loop(self):
         self.spawn_piece()
-        while True:
+        while self.in_game:
             dt=self.clock.tick(FPS)
             for e in pygame.event.get():
                 if e.type==pygame.QUIT: pygame.quit(); sys.exit()
@@ -117,7 +121,9 @@ class TetrisGame:
                     elif e.key==self.keys["ROTATE"]: self.rotate()
                     elif e.key==self.keys["HARD_DROP"]: self.hard_drop()
                     elif e.key==self.keys["HOLD"]: self.hold()
-                    elif e.key==pygame.K_ESCAPE: return
+                    elif e.key==pygame.K_ESCAPE: 
+                        self.in_game = False # ★ 按 ESC 也能安全跳回主選單
+                        break
                 if e.type==pygame.KEYUP:
                     if e.key in (self.keys["LEFT"], self.keys["RIGHT"]): self.move_dir=0
                     if e.key==self.keys["DOWN"]: self.down_pressed=False
@@ -128,8 +134,18 @@ class TetrisGame:
                 if now-self.das_timer>=DAS_DELAY and now-self.arr_timer>=ARR_SPEED:
                     self.move(self.move_dir); self.arr_timer=now
 
-            # 自然下落 / 加速下落
+            # 自然下落
             now=pygame.time.get_ticks()
+            if cfg.DIFFICULTY == "Easy":
+                base_delay = 1500
+            elif cfg.DIFFICULTY == "Normal":
+                base_delay = 900
+            elif cfg.DIFFICULTY == "Hard":
+                base_delay = 300
+            else:
+                base_delay = 1500
+            # 再根據等級做加速
+            self.fall_delay = max(50, int(base_delay * (0.85**self.level)))
             delay = self.fall_delay
             if self.down_pressed:
                 held = now - self.down_start
@@ -191,7 +207,9 @@ class TetrisGame:
         f=pygame.font.SysFont(None,72)
         r=f.render("GAME OVER",True,(255,0,0))
         self.screen.blit(r,r.get_rect(center=(SCREEN_WIDTH//2,SCREEN_HEIGHT//2)))
-        pygame.display.flip(); pygame.time.wait(2000)
-
+        pygame.display.flip()
+        pygame.time.wait(2000)  
+        self.in_game = False
+        
 def main(): TetrisGame()
 if __name__=="__main__": main()
