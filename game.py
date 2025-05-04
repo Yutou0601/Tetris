@@ -54,6 +54,11 @@ class TetrisGame:
         self.fall_delay = 1000
         self.drop_timer = pygame.time.get_ticks()
 
+        # ---- Lock delay ----
+        self.lock_delay = 500  # ms
+        self.lock_timer = None
+
+
         # 「遊戲進行中」旗標
         self.in_game = True  
 
@@ -139,9 +144,9 @@ class TetrisGame:
             if cfg.DIFFICULTY == "Easy":
                 base_delay = 1500
             elif cfg.DIFFICULTY == "Normal":
-                base_delay = 900
+                base_delay = 800
             elif cfg.DIFFICULTY == "Hard":
-                base_delay = 300
+                base_delay = 200
             else:
                 base_delay = 1500
             # 再根據等級做加速
@@ -157,19 +162,34 @@ class TetrisGame:
             self.render()
 
     # ---------- 操作輔助 ----------
-    def move(self,dx):
-        if self.board.valid_position(self.current,dx=dx): self.current.x+=dx
+    
+    def move(self, dx):
+        if self.board.valid_position(self.current, dx=dx):
+            self.current.x += dx
+            self.lock_timer = None
+
+    
     def soft_drop(self):
-        if self.board.valid_position(self.current,dy=1): self.current.y+=1
-        else: self.lock_piece()
-    def rotate(self):
-        self.current.rotate()
-        if not self.board.valid_position(self.current):
-            if self.board.valid_position(self.current,dx=-1): self.current.x-=1
-            elif self.board.valid_position(self.current,dx=1): self.current.x+=1
-            else: [self.current.rotate() for _ in range(3)]
+        """重力 / 快速下落；含 lock delay 邏輯"""
+        if self.board.valid_position(self.current, dy=1):
+            # 還能往下 → 移動並取消 lock timer
+            self.current.y += 1
+            self.lock_timer = None
+        else:
+            now = pygame.time.get_ticks()
+            if self.lock_timer is None:
+                self.lock_timer = now
+            elif now - self.lock_timer >= self.lock_delay:
+                self.lock_piece()
+
+    
+    # ---------- 操作輔助 ----------
+    def rotate(self, dir=1):
+        if self.current.rotate(dir, self.board):
+            self.lock_timer = None
 
     # ---------- 繪圖 ----------
+
     def draw_side_panels(self):
         pygame.draw.rect(self.screen,(0,0,0),(0,0,SIDE_PANEL_PX,SCREEN_HEIGHT))
         pygame.draw.rect(self.screen,(0,0,0),(SCREEN_WIDTH-SIDE_PANEL_PX,0,SIDE_PANEL_PX,SCREEN_HEIGHT))
