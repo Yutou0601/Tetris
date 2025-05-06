@@ -1,147 +1,212 @@
+from __future__ import annotations
 
-import pygame, os, random
+import os
+import random
+from typing import List, Tuple, Dict
+
+import pygame
+
 from settings import CELL_SIZE, ASSET_DIR, COLORS
 
-# 形狀定義 (4x4 陣列，使用整數代表顏色索引)
-SHAPES = {
+# -----------------------------------------------------------------------------
+# Shape definitions (spawn/orientation 0)
+# -----------------------------------------------------------------------------
+
+SHAPES: Dict[str, List[List[int]]] = {
     "I": [
-        [1,1,1,1]
+        [0, 0, 0, 0],
+        [1, 1, 1, 1],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ],
     "J": [
-        [2,0,0],
-        [2,2,2]
+        [2, 0, 0, 0],
+        [2, 2, 2, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ],
     "L": [
-        [0,0,3],
-        [3,3,3]
+        [0, 0, 3, 0],
+        [3, 3, 3, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ],
     "O": [
-        [4,4],
-        [4,4]
+        [0, 4, 4, 0],
+        [0, 4, 4, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ],
     "S": [
-        [0,5,5],
-        [5,5,0]
+        [0, 5, 5, 0],
+        [5, 5, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ],
     "T": [
-        [6,6,6],
-        [0,6,0]
+        [0, 6, 0, 0],
+        [6, 6, 6, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ],
     "Z": [
-        [7,7,0],
-        [0,7,7]
+        [7, 7, 0, 0],
+        [0, 7, 7, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ],
 }
 
-def load_block_images():
-    """
-    嘗試由 All_color_blocks.png 擷取各顏色方塊，若失敗則以純色方塊代替
-    回傳 list，下標與 COLORS 配對
-    """
-    block_surfaces = [pygame.Surface((CELL_SIZE, CELL_SIZE), pygame.SRCALPHA)]
+PIVOT: Dict[str, Tuple[int, int]] = {
+    "I": (1, 2),  # guideline pivot for I
+    "O": (1, 1),  # O technically doesn't rotate, but keep for completeness
+    "default": (1, 1),
+}
+
+SHAPE_KEYS = list(SHAPES.keys())
+
+# -----------------------------------------------------------------------------
+# Block sprite loading helper
+# -----------------------------------------------------------------------------
+
+def load_block_images() -> List[pygame.Surface]:
+    surfaces: List[pygame.Surface] = [pygame.Surface((CELL_SIZE, CELL_SIZE), pygame.SRCALPHA)]
+
     sprite_path = os.path.join(ASSET_DIR, "All_color_blocks.png")
     if not os.path.exists(sprite_path):
         sprite_path = os.path.join(ASSET_DIR, "All_color_blocks.jpg")
+
     if os.path.exists(sprite_path):
         sheet = pygame.image.load(sprite_path).convert_alpha()
-        color_count = sheet.get_width() // sheet.get_height()  # 假設為水平排列
-        w = sheet.get_height()
-        for i in range(color_count):
-            sub = sheet.subsurface((i*w, 0, w, w))
-            block_surfaces.append(pygame.transform.scale(sub, (CELL_SIZE, CELL_SIZE)))
+        h = sheet.get_height()
+        count = sheet.get_width() // h
+        for i in range(count):
+            sub = sheet.subsurface((i * h, 0, h, h))
+            surfaces.append(pygame.transform.scale(sub, (CELL_SIZE, CELL_SIZE)))
+
     else:
-        # fallback 純色
         for c in COLORS[1:]:
             surf = pygame.Surface((CELL_SIZE, CELL_SIZE))
             surf.fill(c)
-            block_surfaces.append(surf)
-    return block_surfaces
+            surfaces.append(surf)
+    return surfaces
 
-BLOCK_IMAGES = None  # 遊戲啟動後由 Game 呼叫 load_block_images 產生
+BLOCK_IMAGES: List[pygame.Surface] | None = None
 
+# -----------------------------------------------------------------------------
+# Kick tables (Y↓)
+# -----------------------------------------------------------------------------
+
+JLSTZ_KICKS: Dict[Tuple[int, int], List[Tuple[int, int]]] = {
+    (0, 1): [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
+    (1, 0): [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
+    (1, 2): [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
+    (2, 1): [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
+    (2, 3): [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
+    (3, 2): [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
+    (3, 0): [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
+    (0, 3): [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],  # ← 修正 Y 位號
+}
+
+I_KICKS: Dict[Tuple[int, int], List[Tuple[int, int]]] = {
+    (0, 1): [(0, 0), (-2, 0), (1, 0), (-2, 1), (1, -2)],
+    (1, 0): [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, 2)],
+    (1, 2): [(0, 0), (-1, 0), (2, 0), (-1, -2), (2, 1)],
+    (2, 1): [(0, 0), (1, 0), (-2, 0), (1, 2), (-2, -1)],
+    (2, 3): [(0, 0), (2, 0), (-1, 0), (2, -1), (-1, 2)],
+    (3, 2): [(0, 0), (-2, 0), (1, 0), (-2, 1), (1, -2)],
+    (3, 0): [(0, 0), (1, 0), (-2, 0), (1, 2), (-2, -1)],
+    (0, 3): [(0, 0), (-1, 0), (2, 0), (-1, -2), (2, 1)],
+}
+
+# -----------------------------------------------------------------------------
+# Rotation helpers – rotate about pivot so it stays fixed within the matrix
+# -----------------------------------------------------------------------------
+
+def _rotate_matrix(matrix: List[List[int]], pivot: Tuple[int, int], cw: bool) -> List[List[int]]:
+    size = len(matrix)
+    pr, pc = pivot
+    new = [[0] * size for _ in range(size)]
+    for r, row in enumerate(matrix):
+        for c, val in enumerate(row):
+            if not val:
+                continue
+            # translate to origin (pivot)
+            dr, dc = r - pr, c - pc
+            if cw:
+                dr, dc = dc, -dr  # 90° CW
+            else:  # CCW
+                dr, dc = -dc, dr
+            nr, nc = pr + dr, pc + dc
+            new[nr][nc] = val
+    return new
+
+# -----------------------------------------------------------------------------
+# Tetromino class
+# -----------------------------------------------------------------------------
 
 class Tetromino:
-    # 面向與旋轉方向
-    ROT_DIR = {+1: 1, -1: -1}   # +1=順時針, -1=逆時針
+    """Single falling tetromino with SRS rotation."""
 
-    # JLSTZ 共用 kick 表
-    JLSTZ_KICKS = {
-        (0,1): [(0,0),(-1,0),(-1,1),(0,-2),(-1,-2)],
-        (1,0): [(0,0),( 1,0),( 1,-1),(0, 2),( 1, 2)],
-        (1,2): [(0,0),( 1,0),( 1,-1),(0, 2),( 1, 2)],
-        (2,1): [(0,0),(-1,0),(-1,1),(0,-2),(-1,-2)],
-        (2,3): [(0,0),( 1,0),( 1,1),(0,-2),( 1,-2)],
-        (3,2): [(0,0),(-1,0),(-1,-1),(0, 2),(-1, 2)],
-        (3,0): [(0,0),(-1,0),(-1,-1),(0, 2),(-1, 2)],
-        (0,3): [(0,0),( 1,0),( 1,1),(0,-2),( 1,-2)],
-    }
+    ROT_DIR = {+1: 1, -1: -1}
 
-    # I 方塊 kick 表
-    I_KICKS = {
-        (0,1): [(0,0),(-2,0),( 1,0),(-2,-1),( 1, 2)],
-        (1,0): [(0,0),( 2,0),(-1,0),( 2, 1),(-1,-2)],
-        (1,2): [(0,0),(-1,0),( 2,0),(-1, 2),( 2,-1)],
-        (2,1): [(0,0),( 1,0),(-2,0),( 1,-2),(-2, 1)],
-        (2,3): [(0,0),( 2,0),(-1,0),( 2, 1),(-1,-2)],
-        (3,2): [(0,0),(-2,0),( 1,0),(-2,-1),( 1, 2)],
-        (3,0): [(0,0),( 1,0),(-2,0),( 1,-2),(-2, 1)],
-        (0,3): [(0,0),(-1,0),( 2,0),(-1, 2),( 2,-1)],
-    }
+    def __init__(self, shape: str):
+        self.shape_key = shape
+        self.matrix = [row[:] for row in SHAPES[shape]]
+        self.x, self.y = 0, -4  # spawn slightly above board
+        self.r = 0  # orientation 0 = spawn
 
-    def __init__(self, shape_key):
-        self.shape_key = shape_key
-        self.matrix = [row[:] for row in SHAPES[shape_key]]
-        self.x, self.y = 0, 0
-        self.r = 0  # 0=Spawn,1=右,2=反,3=左
+    # ---------------- 旋轉 ----------------
+    def _apply_rotation(self, cw: bool):
+        piv = PIVOT.get(self.shape_key, PIVOT["default"])
+        self.matrix = _rotate_matrix(self.matrix, piv, cw)
 
-    # --- 內部旋轉 ---
-    def _rot_cw(self):
-        self.matrix = [list(row[::-1]) for row in zip(*self.matrix)]
+    def rotate(self, direction: int, board) -> bool:
+        if self.shape_key == "O":
+            return True
+        else:
+            if direction not in self.ROT_DIR:
+                return False
+            old_r = self.r
+            new_r = (self.r + self.ROT_DIR[direction]) % 4
+            # 先計算旋轉矩陣
+            self._apply_rotation(cw=(direction == 1))
+            kicks = I_KICKS if self.shape_key == "I" else JLSTZ_KICKS
 
-    def _rot_ccw(self):
-        self.matrix = [list(row) for row in zip(*self.matrix)][::-1]
-
-    # --- SRS 旋轉 ---
-    def rotate(self, direction, board):
-        """
-        direction : +1 順時針, -1 逆時針
-        board     : Board 物件 (用於 valid_position)
-        回傳 True = 成功, False = 失敗
-        """
-        if direction not in (1, -1):
+            for dx, dy in kicks[(old_r, new_r)]:
+                if board.valid_position(self, dx=dx, dy=dy):
+                    self.x += dx
+                    self.y += dy
+                    self.r = new_r
+                    return True
+                
+            # 若全部 Kick 失敗 → 恢復
+            self._apply_rotation(cw=(direction == -1))  # 逆向轉回
             return False
-
-        old_r = self.r
-        new_r = (self.r + self.ROT_DIR[direction]) % 4
-
-        # 先試著轉
-        if direction == 1:
-            self._rot_cw()
-        else:
-            self._rot_ccw()
-
-        kicks = self.I_KICKS if self.shape_key == "I" else self.JLSTZ_KICKS
-        for dx, dy in kicks[(old_r, new_r)]:
-            if board.valid_position(self, dx=dx, dy=dy):
-                self.x += dx
-                self.y += dy
-                self.r = new_r
-                return True
-
-        # 若全部 kick 失敗 → 還原
-        if direction == 1:
-            self._rot_ccw()
-        else:
-            self._rot_cw()
-        return False
-
-    # --- 取得所有方塊座標 ---
+    # ---------------- 座標輸出 ----------------
     def get_cells(self):
-        for row_idx, row in enumerate(self.matrix):
-            for col_idx, val in enumerate(row):
+        for ry, row in enumerate(self.matrix):
+            for cx, val in enumerate(row):
                 if val:
-                    yield self.x + col_idx, self.y + row_idx, val
+                    yield self.x + cx, self.y + ry, val
+
+    # ---------------- 其他 ----------------
+    def __repr__(self):
+        return f"<Tetromino {self.shape_key} r={self.r} pos=({self.x},{self.y})>"
 
 
-def random_tetromino():
-    return Tetromino(random.choice(list(SHAPES.keys())))
+# -----------------------------------------------------------------------------
+# 工具函式
+# -----------------------------------------------------------------------------
+
+def random_tetromino() -> Tetromino:
+    return Tetromino(random.choice(SHAPE_KEYS))
+
+__all__ = [
+    "SHAPES",
+    "PIVOT",
+    "load_block_images",
+    "BLOCK_IMAGES",
+    "Tetromino",
+    "random_tetromino",
+]                 
