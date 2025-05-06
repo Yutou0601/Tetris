@@ -4,6 +4,7 @@ from settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, DEFAULT_KEYS, MUSIC_FILES
 
 WHITE, YELLOW, BG = (255,255,255), (255,220,0), (25,25,25)
 
+# ---------- UI ----------
 class Button:
     def __init__(self, txt, font, center):
         self.txt, self.font = txt, font
@@ -20,6 +21,7 @@ class MenuUI:
                   Button("Quit",f,(SCREEN_WIDTH//2,SCREEN_HEIGHT//2+80))]
         bgp=os.path.join(os.path.dirname(__file__),"Material","main_background.jpg")
         self.bg=pygame.transform.scale(pygame.image.load(bgp),(SCREEN_WIDTH,SCREEN_HEIGHT)) if os.path.exists(bgp) else None
+
     def run(self):
         while True:
             self.clock.tick(FPS)
@@ -34,6 +36,7 @@ class MenuUI:
             for b in self.btn: b.draw(self.s,b.rect.collidepoint(mp))
             pygame.display.flip()
 
+# ---------- 設定 ----------
 class SettingUI():
     ACTIONS = ["LEFT", "RIGHT", "DOWN", "ROTATE", "HARD_DROP", "HOLD"]
     DIFFICULTY_LEVELS = ["Easy", "Normal", "Hard"] 
@@ -48,16 +51,20 @@ class SettingUI():
         self.line_h, self.start_y = 48, 60
         self.back = Button("Back (Esc)", self.font, (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 20))
 
+    # ---------- 主迴圈 ----------
     def run(self):
         while True:
             self.clock.tick(FPS)
             for e in pygame.event.get():
+
                 if e.type == pygame.QUIT:
                     return
+                
                 if e.type == pygame.KEYDOWN and not self.wait and e.key == pygame.K_ESCAPE:
                     cfg.MUSIC_ON, cfg.SFX_ON = self.music_on, self.sfx_on
                     cfg.DIFFICULTY = self.DIFFICULTY_LEVELS[self.difficulty_idx]  # 記錄難度
                     return
+                
                 if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                     mx, my = e.pos
 
@@ -74,20 +81,26 @@ class SettingUI():
                         if pygame.Rect(60, self.start_y + i * self.line_h - 5, SCREEN_WIDTH - 120, self.line_h).collidepoint((mx, my)):
                             self.wait = a
                             break
+
                     # Music toggle
                     if pygame.Rect(60, self.start_y + len(self.ACTIONS) * self.line_h + 15, 300, self.line_h).collidepoint((mx, my)):
                         self.music_on = not self.music_on
+
                         if self.music_on:
                             if not pygame.mixer.music.get_busy() and MUSIC_FILES:
                                 pygame.mixer.music.load(MUSIC_FILES[0])
                                 pygame.mixer.music.play()
+
                             else:
                                 pygame.mixer.music.unpause()
+
                         else:
                             pygame.mixer.music.pause()
+
                     # SFX toggle
                     if pygame.Rect(60, self.start_y + len(self.ACTIONS) * self.line_h + 65, 300, self.line_h).collidepoint((mx, my)):
                         self.sfx_on = not self.sfx_on
+
                     # 難度切換
                     if pygame.Rect(60, self.start_y + len(self.ACTIONS) * self.line_h + 115, 300, self.line_h).collidepoint((mx, my)):
                         self.difficulty_idx = (self.difficulty_idx + 1) % len(self.DIFFICULTY_LEVELS)
