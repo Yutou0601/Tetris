@@ -305,7 +305,7 @@ class TetrisGame:
     def draw_preview(self, piece, box):
         s = (box.width - 10) // 4
         ox = box.x + (box.width - len(piece.matrix[0]) * s) // 2
-        oy = box.y + (box.height - len(piece.matrix) * s) // 2
+        oy = box.y + (box.height - len(piece.matrix) * s) // 2 + s
         for r, row in enumerate(piece.matrix):
             for c, v in enumerate(row):
                 if v:
